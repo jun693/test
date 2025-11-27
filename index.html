@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECharts 折线图示例</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: #f5f7fa;
+        }
+        
+        .chart-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 8px 16px;
+            background-color: #409eff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover:not(:disabled) {
+            background-color: #66b1ff;
+        }
+        
+        button:disabled {
+            background-color: #c0c4cc;
+            cursor: not-allowed;
+        }
+        
+        .chart {
+            border: 1px solid #ebeef5;
+            border-radius: 4px;
+            min-height: 400px;
+            background-color: white;
+        }
+        
+        .tip {
+            margin-top: 10px;
+            color: #909399;
+            font-size: 14px;
+            text-align: center;
+        }
+        
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            .chart-container {
+                padding: 10px;
+            }
+            
+            .chart {
+                min-height: 300px;
+            }
+            
+            .controls {
+                flex-direction: column;
+            }
+            
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+    <!-- 引用本地的echarts.min.js -->
+    <script src="./echarts.min.js"></script>
+</head>
+<body>
+    <div class="chart-container">
+        <div class="controls">
+            <button id="startBtn" onclick="startAutoAdd()">开始自动添加 (当前: 100)</button>
+            <button id="stopBtn" onclick="stopAutoAdd()" disabled>停止自动添加</button>
+            <button id="resetBtn" onclick="resetData()">重置数据</button>
+        </div>
+        <div id="chart" class="chart" style="height: 500px; width: 100%;"></div>
+        <p class="tip">提示：图表支持缩放、拖拽，可自适应窗口大小变化。数据将每1秒自动增加100条。</p>
+    </div>
+
+    <script>
+        // 图表实例
+        let chartInstance = null;
+        // 数据相关状态
+        let dataCount = 100; // 初始数据量
+        const maxDataCount = 10000; // 最大数据量
+        // 自动增量定时器引用
+        let autoAddTimer = null;
+        
+        // DOM元素引用
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        
+        // 生成模拟数据
+        function generateData(count) {
+            const xAxisData = [];
+            const seriesData = [];
+            
+            for (let i = 0; i < count; i++) {
+                xAxisData.push(`时间${i}`);
+                seriesData.push(Math.sin(i / 10) * Math.random() * 50 + 50);
+            }
+            
+            return { xAxisData, seriesData };
+        }
+        
+        // 初始化图表
+        function initChart() {
+            const chartDom = document.getElementById('chart');
+            if (!chartDom) return;
+            
+            // 创建图表实例
+            chartInstance = echarts.init(chartDom);
+            
+            const { xAxisData, seriesData } = generateData(dataCount);
+            
+            // 配置项
+            const option = {
+                title: {
+                    text: '折线图示例',
+                    left: 'center'
+                },
+                tooltip: {
+                    trigger: 'axis',
+                    formatter: function(params) {
+                        const data = params[0];
+                        return `${data.axisValue}<br/>${data.marker}${data.seriesName}: ${data.value.toFixed(2)}`;
+                    }
+                },
+                grid: {
+                    left: '3%',
+                    right: '4%',
+                    bottom: '3%',
+                    containLabel: true
+                },
+                xAxis: {
+                    type: 'category',
+                    data: xAxisData,
+                    axisLabel: {
+                        show: false // 去掉横坐标文字
+                    }
+                },
+                yAxis: {
+                    type: 'value'
+                },
+                dataZoom: [
+                    {
+                        type: 'inside',
+                        start: 0,
+                        end: 100
+                    },
+                    {
+                        start: 0,
+                        end: 100
+                    }
+                ],
+                series: [
+                    {
+                        name: '数值',
+                        type: 'line',
+                        smooth: true,
+                        symbol: 'none', // 大数据量下不显示标记点
+                        sampling: 'lttb', // 大数据量下的采样策略
+                        itemStyle: {
+                            color: '#5470c6'
+                        },
+                        lineStyle: {
+                            width: 2
+                        },
+                        data: seriesData
+                    }
+                ]
+            };
+            
+            // 设置配置项
+            chartInstance.setOption(option);
+            
+            // 监听窗口大小变化
+            window.addEventListener('resize', handleResize);
+        }
+        
+        // 更新图表数据
+        function updateChartData() {
+            if (!chartInstance) return;
+            
+            const { xAxisData, seriesData } = generateData(dataCount);
+            
+            chartInstance.setOption({
+                xAxis: {
+                    data: xAxisData
+                },
+                series: [
+                    {
+                        data: seriesData
+                    }
+                ]
+            });
+            
+            // 更新按钮显示
+            updateButtonState();
+        }
+        
+        // 更新按钮状态
+        function updateButtonState() {
+            startBtn.textContent = `开始自动添加 (当前: ${dataCount})`;
+            startBtn.disabled = autoAddTimer !== null || dataCount >= maxDataCount;
+            stopBtn.disabled = autoAddTimer === null;
+        }
+        
+        // 处理窗口大小变化
+        function handleResize() {
+            if (chartInstance) {
+                chartInstance.resize();
+                
+                // 移动端适配
+                const isMobile = window.innerWidth <= 768;
+                chartInstance.setOption({
+                    title: {
+                        textStyle: {
+                            fontSize: isMobile ? 16 : 20
+                        }
+                    },
+                    xAxis: {
+                        axisLabel: {
+                            show: false // 始终隐藏横坐标文字
+                        }
+                    },
+                    grid: {
+                        left: isMobile ? '5%' : '3%',
+                        right: isMobile ? '5%' : '4%',
+                        bottom: isMobile ? '10%' : '3%'
+                    }
+                });
+            }
+        }
+        
+        // 增量添加数据 - 使用appendData方法（ECharts支持的高效增量数据更新方法）
+        function addMoreData() {
+            if (dataCount >= maxDataCount || !chartInstance) return;
+            
+            // 每次添加100条数据
+            const step = 100;
+            const targetCount = Math.min(dataCount + step, maxDataCount);
+            
+            // 生成新数据
+            function generateNewData(startIndex, count) {
+                const newXAxisData = [];
+                const newSeriesData = [];
+                
+                for (let i = 0; i < count; i++) {
+                    const index = startIndex + i;
+                    newXAxisData.push(`时间${index}`);
+                    newSeriesData.push(Math.sin(index / 10) * Math.random() * 50 + 50);
+                }
+                
+                return { newXAxisData, newSeriesData };
+            }
+            
+            const { newSeriesData } = generateNewData(dataCount, step);
+            
+            // 使用appendData方法（ECharts推荐的高效增量数据更新方法）
+            chartInstance.appendData({
+                seriesIndex: 0,
+                data: newSeriesData
+            });
+            
+            // 更新xAxis数据
+            const option = chartInstance.getOption();
+            const currentAxisData = option.xAxis[0].data || [];
+            const newXAxisData = generateNewData(dataCount, step).newXAxisData;
+            chartInstance.setOption({
+                xAxis: {
+                    data: currentAxisData.concat(newXAxisData)
+                }
+            });
+            
+            dataCount = targetCount;
+            
+            // 更新按钮显示
+            updateButtonState();
+            
+            // 达到最大数据量时停止定时器
+            if (dataCount >= maxDataCount && autoAddTimer) {
+                clearInterval(autoAddTimer);
+                autoAddTimer = null;
+                updateButtonState();
+            }
+        }
+        
+        // 启动自动增量
+        function startAutoAdd() {
+            if (autoAddTimer || dataCount >= maxDataCount) return;
+            
+            // 立即执行一次
+            addMoreData();
+            
+            // 设置定时器，每秒执行一次
+            autoAddTimer = setInterval(() => {
+                if (dataCount < maxDataCount) {
+                    addMoreData();
+                }
+            }, 1000);
+            
+            // 更新按钮状态
+            updateButtonState();
+        }
+        
+        // 停止自动增量
+        function stopAutoAdd() {
+            if (autoAddTimer) {
+                clearInterval(autoAddTimer);
+                autoAddTimer = null;
+                updateButtonState();
+            }
+        }
+        
+        // 重置数据
+        function resetData() {
+            // 停止自动增量
+            stopAutoAdd();
+            dataCount = 100;
+            updateChartData();
+        }
+        
+        // 页面加载完成后初始化图表
+        window.addEventListener('load', () => {
+            initChart();
+            // 自动开始添加数据
+            startAutoAdd();
+        });
+        
+        // 页面卸载时清理资源
+        window.addEventListener('beforeunload', () => {
+            window.removeEventListener('resize', handleResize);
+            // 清理定时器
+            if (autoAddTimer) {
+                clearInterval(autoAddTimer);
+            }
+            if (chartInstance) {
+                chartInstance.dispose();
+            }
+        });
+    </script>
+</body>
+</html>
